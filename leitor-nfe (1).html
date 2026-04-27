@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leitor de NF-e — XML para Excel</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F7F6F2;
+    --surface: #FFFFFF;
+    --surface2: #F0EDE6;
+    --border: #D8D4CB;
+    --border2: #C5C0B4;
+    --text: #1C1A17;
+    --text2: #6B6760;
+    --text3: #9C9890;
+    --accent: #1A5C3A;
+    --accent-light: #E3F0E9;
+    --accent2: #2D7A50;
+    --danger: #8B2020;
+    --danger-light: #FCEAEA;
+    --amber: #7A4F00;
+    --amber-light: #FEF3DC;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Sora', sans-serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05);
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0 0 4rem;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2; }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  header p {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 1px;
+  }
+
+  .badge {
+    margin-left: auto;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+    border: 1px solid rgba(26,92,58,0.15);
+  }
+
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Drop zone */
+  #drop-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    background: var(--surface);
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    box-shadow: var(--shadow);
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent2);
+    background: var(--accent-light);
+    transform: scale(1.005);
+  }
+  .dz-icon {
+    width: 52px; height: 52px;
+    background: var(--accent-light);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 1.25rem;
+  }
+  .dz-icon svg { width: 24px; height: 24px; stroke: var(--accent); fill: none; stroke-width: 1.5; }
+  #drop-zone h2 { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  #drop-zone p { font-size: 13px; color: var(--text2); }
+  .tags { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .tag {
+    font-size: 11px; font-family: var(--mono);
+    padding: 3px 10px; border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text2);
+  }
+
+  /* Status bar */
+  #status-bar {
+    display: none;
+    margin-top: 1rem;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    align-items: center;
+    gap: 8px;
+  }
+  #status-bar.ok { background: var(--accent-light); color: var(--accent); border: 1px solid rgba(26,92,58,0.2); display: flex; }
+  #status-bar.err { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(139,32,32,0.2); display: flex; }
+
+  /* Results */
+  #results { display: none; margin-top: 2rem; }
+
+  .section-label {
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+  }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.75rem;
+  }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .metric-label { font-size: 11px; font-family: var(--mono); color: var(--text3); margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: -0.03em; }
+  .metric-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+  /* Tabs */
+  .tab-row {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    font-size: 12px; font-family: var(--mono);
+    padding: 5px 12px; border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer; color: var(--text2);
+    transition: all 0.15s;
+  }
+  .tab:hover { border-color: var(--accent2); color: var(--accent); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1.25rem;
+  }
+
+  .nf-header-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  @media (max-width: 600px) { .nf-header-grid { grid-template-columns: 1fr; } }
+  .nf-part-label { font-size: 10px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+  .nf-part-name { font-size: 15px; font-weight: 600; color: var(--text); }
+  .nf-part-doc { font-size: 12px; font-family: var(--mono); color: var(--text2); margin-top: 2px; }
+
+  .nf-meta {
+    display: flex; gap: 2rem; flex-wrap: wrap;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .nf-meta-item span:first-child { color: var(--text2); }
+  .nf-meta-item span:last-child { font-weight: 500; margin-left: 4px; }
+
+  .chave {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    word-break: break-all;
+    padding: 6px 10px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+
+  /* Totais */
+  .totais-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+  }
+  .total-item {
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+  }
+  .total-item .tl { font-size: 10px; font-family: var(--mono); color: var(--text3); margin-bottom: 2px; }
+  .total-item .tv { font-size: 14px; font-weight: 500; color: var(--text); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface); min-width: 700px; }
+  thead th {
+    text-align: left;
+    padding: 9px 12px;
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--accent-light); }
+
+  /* Action bar */
+  .action-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 1.5rem; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 18px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500; font-family: var(--sans);
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+    transition: all 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .btn:hover { background: var(--surface2); border-color: var(--border2); }
+  .btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .btn-green {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(26,92,58,0.25);
+  }
+  .btn-green:hover { background: var(--accent2); border-color: var(--accent2); }
+  .btn-outline { background: transparent; }
+  .btn-ghost { border-color: transparent; color: var(--text2); box-shadow: none; }
+  .btn-ghost:hover { background: var(--surface2); border-color: var(--border); color: var(--text); }
+
+  .sep { width: 1px; height: 24px; background: var(--border); margin: 0 2px; }
+
+  footer {
+    text-align: center;
+    margin-top: 3rem;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text3);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+  </div>
+  <div>
+    <h1>Leitor de NF-e</h1>
+    <p>XML para Excel — gratuito e sem enviar dados para servidores</p>
+  </div>
+  <span class="badge">100% local</span>
+</header>
+
+<main>
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <input type="file" id="file-input" accept=".xml" multiple style="display:none" onchange="handleFiles(this.files)">
+    <div class="dz-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </div>
+    <h2>Arraste os XMLs aqui</h2>
+    <p>ou clique para selecionar um ou mais arquivos</p>
+    <div class="tags">
+      <span class="tag">NF-e</span>
+      <span class="tag">NFC-e</span>
+      <span class="tag">múltiplos arquivos</span>
+      <span class="tag">sem upload</span>
+    </div>
+  </div>
+
+  <div id="status-bar"></div>
+
+  <div id="results">
+    <div class="section-label">Resumo geral</div>
+    <div class="metrics" id="metrics-row"></div>
+
+    <div class="section-label">Notas carregadas</div>
+    <div class="tab-row" id="tab-bar"></div>
+
+    <div class="card" id="nf-card"></div>
+
+    <div class="section-label" style="margin-top:1.5rem">Itens da nota selecionada</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr id="itens-header"></tr></thead>
+        <tbody id="itens-body"></tbody>
+      </table>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-green" onclick="exportExcel()">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar Excel (todas as NFs)
+      </button>
+      <button class="btn btn-outline" onclick="exportCSV()">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar CSV
+      </button>
+      <div class="sep"></div>
+      <button class="btn btn-ghost" onclick="clearAll()">Limpar tudo</button>
+    </div>
+  </div>
+</main>
+
+<footer>nenhum dado é enviado para servidores — processamento 100% no seu navegador</footer>
+
+<script>
+let allNFs = [];
+let currentIdx = 0;
+
+function g(el, tag) {
+  const f = el.getElementsByTagName(tag);
+  return f.length ? f[0].textContent.trim() : '';
+}
+
+function parseNFe(xmlText, filename) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('XML inválido ou corrompido');
+  const hasNFe = doc.getElementsByTagName('NFe').length || doc.getElementsByTagName('nfeProc').length;
+  if (!hasNFe) throw new Error('Não parece ser um XML de NF-e');
+
+  const ide = doc.getElementsByTagName('ide')[0];
+  const emit = doc.getElementsByTagName('emit')[0];
+  const dest = doc.getElementsByTagName('dest')[0];
+  const total = doc.getElementsByTagName('ICMSTot')[0];
+  const infNFe = doc.getElementsByTagName('infNFe')[0];
+  const chave = infNFe ? (infNFe.getAttribute('Id')||'').replace('NFe','') : '';
+
+  const dets = doc.getElementsByTagName('det');
+  const itens = [];
+  for (let i = 0; i < dets.length; i++) {
+    const det = dets[i];
+    const prod = det.getElementsByTagName('prod')[0];
+    const imp = det.getElementsByTagName('imposto')[0];
+    const icmsEl = imp ? imp.getElementsByTagName('ICMS')[0] : null;
+    const icmsChild = icmsEl ? icmsEl.children[0] : null;
+    const ipiEl = imp ? imp.getElementsByTagName('IPI')[0] : null;
+    const ipiChild = ipiEl ? (ipiEl.getElementsByTagName('IPITrib')[0] || ipiEl.getElementsByTagName('IPINT')[0]) : null;
+    itens.push({
+      'Nº Item': det.getAttribute('nItem') || (i+1),
+      'Código': prod ? g(prod,'cProd') : '',
+      'Descrição': prod ? g(prod,'xProd') : '',
+      'NCM': prod ? g(prod,'NCM') : '',
+      'CFOP': prod ? g(prod,'CFOP') : '',
+      'Unidade': prod ? g(prod,'uCom') : '',
+      'Quantidade': prod ? g(prod,'qCom') : '',
+      'Vl. Unitário': prod ? g(prod,'vUnCom') : '',
+      'Vl. Total Item': prod ? g(prod,'vProd') : '',
+      'Desconto': prod ? g(prod,'vDesc') : '',
+      'CST/CSOSN': icmsChild ? (g(icmsChild,'CST')||g(icmsChild,'CSOSN')) : '',
+      'Base ICMS': icmsChild ? g(icmsChild,'vBC') : '',
+      'Alíq. ICMS (%)': icmsChild ? g(icmsChild,'pICMS') : '',
+      'Vl. ICMS': icmsChild ? g(icmsChild,'vICMS') : '',
+      'Vl. IPI': ipiChild ? g(ipiChild,'vIPI') : '',
+      'EAN/GTIN': prod ? g(prod,'cEAN') : '',
+    });
+  }
+
+  return {
+    filename, chave,
+    numero: ide ? g(ide,'nNF') : '',
+    serie: ide ? g(ide,'serie') : '',
+    dhEmi: ide ? (g(ide,'dhEmi')||g(ide,'dEmi')) : '',
+    natOp: ide ? g(ide,'natOp') : '',
+    emitNome: emit ? (g(emit,'xNome')||g(emit,'xFant')) : '',
+    emitCNPJ: emit ? g(emit,'CNPJ') : '',
+    destNome: dest ? g(dest,'xNome') : '',
+    destDoc: dest ? (g(dest,'CNPJ')||g(dest,'CPF')) : '',
+    vProd: total ? g(total,'vProd') : '',
+    vDesc: total ? g(total,'vDesc') : '',
+    vFrete: total ? g(total,'vFrete') : '',
+    vICMS: total ? g(total,'vICMS') : '',
+    vIPI: total ? g(total,'vIPI') : '',
+    vPIS: total ? g(total,'vPIS') : '',
+    vCOFINS: total ? g(total,'vCOFINS') : '',
+    vNF: total ? g(total,'vNF') : '',
+    itens
+  };
+}
+
+function fmt(val) {
+  if (!val && val !== 0) return '—';
+  const n = parseFloat(val);
+  if (isNaN(n)) return val;
+  return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
+  if (s.length >= 10) return s.substring(0,10).split('-').reverse().join('/');
+  return s;
+}
+function maskCNPJ(s) {
+  if (!s) return '—';
+  if (s.length === 14) return s.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+  if (s.length === 11) return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+  return s;
+}
+
+async function handleFiles(files) {
+  allNFs = [];
+  const errors = [];
+  for (const f of files) {
+    try { allNFs.push(parseNFe(await f.text(), f.name)); }
+    catch(e) { errors.push(`${f.name}: ${e.message}`); }
+  }
+  const bar = document.getElementById('status-bar');
+  if (allNFs.length) {
+    bar.className = 'ok';
+    bar.textContent = `✓ ${allNFs.length} nota(s) carregada(s) com sucesso` + (errors.length ? ` · ${errors.length} erro(s)` : '');
+    bar.style.display = 'flex';
+    renderAll();
+  } else {
+    bar.className = 'err';
+    bar.textContent = '✗ Nenhum XML válido encontrado. ' + errors.join(' | ');
+    bar.style.display = 'flex';
+    document.getElementById('results').style.display = 'none';
+  }
+}
+
+function renderAll() {
+  const totalVlr = allNFs.reduce((s,n) => s + (parseFloat(n.vNF)||0), 0);
+  const totalItens = allNFs.reduce((s,n) => s + n.itens.length, 0);
+  document.getElementById('metrics-row').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">notas fiscais</div>
+      <div class="metric-value">${allNFs.length}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">total de itens</div>
+      <div class="metric-value">${totalItens}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">valor total geral</div>
+      <div class="metric-value" style="font-size:16px">${fmt(totalVlr.toFixed(2))}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">período</div>
+      <div class="metric-value" style="font-size:14px">${fmtDate(allNFs[0].dhEmi)}</div>
+      <div class="metric-sub">${allNFs.length > 1 ? 'até ' + fmtDate(allNFs[allNFs.length-1].dhEmi) : ''}</div>
+    </div>
+  `;
+  const tabBar = document.getElementById('tab-bar');
+  tabBar.innerHTML = allNFs.map((nf,i) =>
+    `<button class="tab${i===0?' active':''}" onclick="switchTab(${i})">NF ${nf.numero||('#'+(i+1))}</button>`
+  ).join('');
+  document.getElementById('results').style.display = 'block';
+  currentIdx = 0;
+  renderNF(0);
+}
+
+function switchTab(i) {
+  currentIdx = i;
+  document.querySelectorAll('.tab').forEach((b,j) => b.classList.toggle('active', i===j));
+  renderNF(i);
+}
+
+function renderNF(i) {
+  const nf = allNFs[i];
+  document.getElementById('nf-card').innerHTML = `
+    <div class="nf-header-grid">
+      <div>
+        <div class="nf-part-label">Emitente</div>
+        <div class="nf-part-name">${nf.emitNome||'—'}</div>
+        <div class="nf-part-doc">CNPJ ${maskCNPJ(nf.emitCNPJ)}</div>
+      </div>
+      <div>
+        <div class="nf-part-label">Destinatário</div>
+        <div class="nf-part-name">${nf.destNome||'—'}</div>
+        <div class="nf-part-doc">${maskCNPJ(nf.destDoc)}</div>
+      </div>
+    </div>
+    <div class="nf-meta">
+      <div class="nf-meta-item"><span>Número</span><span>${nf.numero||'—'} / Série ${nf.serie||'—'}</span></div>
+      <div class="nf-meta-item"><span>Emissão</span><span>${fmtDate(nf.dhEmi)}</span></div>
+      <div class="nf-meta-item"><span>Natureza</span><span>${nf.natOp||'—'}</span></div>
+      <div class="nf-meta-item"><span>Itens</span><span>${nf.itens.length}</span></div>
+    </div>
+    <div style="margin:1rem 0 0.75rem;font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.07em">Totais</div>
+    <div class="totais-grid">
+      <div class="total-item"><div class="tl">Produtos</div><div class="tv">${fmt(nf.vProd)}</div></div>
+      <div class="total-item"><div class="tl">Desconto</div><div class="tv">${fmt(nf.vDesc)}</div></div>
+      <div class="total-item"><div class="tl">Frete</div><div class="tv">${fmt(nf.vFrete)}</div></div>
+      <div class="total-item"><div class="tl">ICMS</div><div class="tv">${fmt(nf.vICMS)}</div></div>
+      <div class="total-item"><div class="tl">IPI</div><div class="tv">${fmt(nf.vIPI)}</div></div>
+      <div class="total-item"><div class="tl">PIS</div><div class="tv">${fmt(nf.vPIS)}</div></div>
+      <div class="total-item"><div class="tl">COFINS</div><div class="tv">${fmt(nf.vCOFINS)}</div></div>
+      <div class="total-item" style="background:var(--accent-light);border-color:rgba(26,92,58,0.2)">
+        <div class="tl" style="color:var(--accent)">Total NF</div>
+        <div class="tv" style="color:var(--accent)">${fmt(nf.vNF)}</div>
+      </div>
+    </div>
+    ${nf.chave ? `<div class="chave">Chave de acesso: ${nf.chave}</div>` : ''}
+  `;
+  const extraCols = ['Natureza Op.','CNPJ Emitente','CNPJ/CPF Destinatário'];
+  const cols = Object.keys(nf.itens[0]||{});
+  const allCols = [...extraCols, ...cols];
+  document.getElementById('itens-header').innerHTML = allCols.map(c=>`<th>${c}</th>`).join('');
+  document.getElementById('itens-body').innerHTML = nf.itens.map(row => {
+    const extra = [nf.natOp, nf.emitCNPJ, nf.destDoc];
+    return '<tr>' + [...extra, ...cols.map(c=>row[c]??'')].map(v=>`<td>${v}</td>`).join('') + '</tr>';
+  }).join('');
+}
+
+function buildRows() {
+  const nfCols   = ['NF Número','Chave Acesso','Série','Data Emissão','Natureza Op.','Emitente','CNPJ Emitente','Destinatário','CNPJ/CPF Destinatário','Qtd. Itens NF','Vl. Produtos','Vl. Desconto NF','Frete','ICMS','IPI','PIS','COFINS','Total NF'];
+  const itemCols = ['Nº Item','Código','Descrição','NCM','CFOP','Unidade','Quantidade','Vl. Unitário','Vl. Total Item','Desconto Item','CST/CSOSN','Base ICMS','Alíq. ICMS (%)','Vl. ICMS','Vl. IPI','EAN/GTIN'];
+  const allCols  = [...nfCols, ...itemCols];
+  const rows = [allCols];
+  allNFs.forEach(nf => {
+    nf.itens.forEach(it => {
+      const nfData = [nf.numero,nf.chave,nf.serie,fmtDate(nf.dhEmi),nf.natOp,nf.emitNome,nf.emitCNPJ,nf.destNome,nf.destDoc,nf.itens.length,nf.vProd,nf.vDesc,nf.vFrete,nf.vICMS,nf.vIPI,nf.vPIS,nf.vCOFINS,nf.vNF];
+      const itData = [it['Nº Item'],it['Código'],it['Descrição'],it['NCM'],it['CFOP'],it['Unidade'],it['Quantidade'],it['Vl. Unitário'],it['Vl. Total Item'],it['Desconto'],it['CST/CSOSN'],it['Base ICMS'],it['Alíq. ICMS (%)'],it['Vl. ICMS'],it['Vl. IPI'],it['EAN/GTIN']];
+      rows.push([...nfData, ...itData]);
+    });
+  });
+  return { allCols, rows };
+}
+
+function exportExcel() {
+  if (!allNFs.length) return;
+  const wb = XLSX.utils.book_new();
+  const { rows } = buildRows();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Itens NF-e');
+  XLSX.writeFile(wb, 'notas_fiscais.xlsx');
+}
+
+function exportCSV() {
+  if (!allNFs.length) return;
+  const { rows } = buildRows();
+  const csv = rows.map(r => r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download='notas_fiscais.csv'; a.click();
+}
+
+function clearAll() {
+  allNFs = []; currentIdx = 0;
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('status-bar').style.display = 'none';
+  document.getElementById('file-input').value = '';
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+</script>
+</body>
+</html>
